@@ -1,5 +1,3 @@
-import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
-
 const GROQ_API_BASE = "https://api.groq.com";
 
 async function handleRequest(request: Request): Promise<Response> {
@@ -64,7 +62,7 @@ function handleOptions(request: Request): Response {
   });
 }
 
-serve(async (request) => {
+Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return handleOptions(request);
   }
