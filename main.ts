@@ -1,10 +1,12 @@
-// Groq Reverse Proxy - supports api.groq.com and console.groq.com
+// Groq Reverse Proxy - supports all groq.com subdomains
 // Usage:
 //   /api/...     -> forwards to api.groq.com
 //   Everything else -> forwards to console.groq.com
+//   Also intercepts stytchb2b.groq.com OAuth calls
 
 const API_HOST = "https://api.groq.com";
 const CONSOLE_HOST = "https://console.groq.com";
+const STYTCH_HOST = "https://api.stytchb2b.groq.com";
 
 async function handleRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
@@ -26,7 +28,7 @@ async function handleRequest(request: Request): Promise<Response> {
 
   // Forward headers
   const headers = new Headers();
-  const allowedHeaders = ["accept", "content-type", "authorization", "cookie", "user-agent", "x-requested-with"];
+  const allowedHeaders = ["accept", "content-type", "authorization", "cookie", "user-agent", "x-requested-with", "referer", "origin"];
   for (const [key, value] of request.headers.entries()) {
     if (allowedHeaders.includes(key.toLowerCase())) {
       headers.set(key, value);
@@ -49,7 +51,6 @@ async function handleRequest(request: Request): Promise<Response> {
         // Rewrite redirect Location to go through our proxy
         let newLocation = value;
         if (value.startsWith("/")) {
-          // Relative path - keep as-is (proxy handles all paths)
           newLocation = value;
         } else {
           try {
