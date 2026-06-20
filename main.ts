@@ -1,37 +1,28 @@
-// Multi-domain Groq proxy - supports api.groq.com and console.groq.com
+// Groq Reverse Proxy - supports api.groq.com and console.groq.com
 // Usage:
 //   /api/...     -> forwards to api.groq.com
-//   /console/... -> forwards to console.groq.com
+//   Everything else -> forwards to console.groq.com
 
-const GROQ_HOSTS: Record<string, string> = {
-  api: "https://api.groq.com",
-  console: "https://console.groq.com",
-};
+const API_HOST = "https://api.groq.com";
+const CONSOLE_HOST = "https://console.groq.com";
 
 async function handleRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
 
   // Health check
-  if (path === "/" || path === "/health") {
-    return new Response(JSON.stringify({ status: "ok", message: "Groq Proxy is running", hosts: Object.keys(GROQ_HOSTS) }), {
+  if (path === "/health") {
+    return new Response(JSON.stringify({ status: "ok", message: "Groq Proxy is running" }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
   }
 
-  // Match /:host/... pattern
-  const match = path.match(/^\/(api|console)(\/.*)?$/);
-  if (!match) {
-    return new Response(JSON.stringify({ error: "Invalid path", usage: "Use /api/... or /console/..." }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  const host = match[1];
-  const restPath = match[2] || "/";
-  const targetUrl = `${GROQ_HOSTS[host]}${restPath}${url.search}`;
+  // Route: /api/... -> api.groq.com, everything else -> console.groq.com
+  const isApi = path.startsWith("/api");
+  const targetHost = isApi ? API_HOST : CONSOLE_HOST;
+  const targetPath = isApi ? path.replace(/^\/api/, "") || "/" : path;
+  const targetUrl = `${targetHost}${targetPath}${url.search}`;
 
   // Forward headers
   const headers = new Headers();
@@ -52,19 +43,19 @@ async function handleRequest(request: Request): Promise<Response> {
 
     const responseHeaders = new Headers();
 
-    // Copy response headers, rewriting Location for redirects
     for (const [key, value] of response.headers.entries()) {
       const lowerKey = key.toLowerCase();
       if (lowerKey === "location") {
         // Rewrite redirect Location to go through our proxy
         let newLocation = value;
         if (value.startsWith("/")) {
-          newLocation = `/${host}${value}`;
+          // Relative path - keep as-is (proxy handles all paths)
+          newLocation = value;
         } else {
           try {
             const locUrl = new URL(value);
             if (locUrl.hostname.includes("groq.com")) {
-              newLocation = `/${host}${locUrl.pathname}${locUrl.search}${locUrl.hash}`;
+              newLocation = `${locUrl.pathname}${locUrl.search}${locUrl.hash}`;
             }
           } catch {
             // Keep original
