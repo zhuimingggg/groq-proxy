@@ -50,7 +50,34 @@ async function handleRequest(request: Request): Promise<Response> {
       redirect: "manual",
     });
 
-    const responseHeaders = new Headers(response.headers);
+    const responseHeaders = new Headers();
+
+    // Copy response headers, rewriting Location for redirects
+    for (const [key, value] of response.headers.entries()) {
+      const lowerKey = key.toLowerCase();
+      if (lowerKey === "location") {
+        // Rewrite redirect Location to go through our proxy
+        let newLocation = value;
+        if (value.startsWith("/")) {
+          newLocation = `/${host}${value}`;
+        } else {
+          try {
+            const locUrl = new URL(value);
+            if (locUrl.hostname.includes("groq.com")) {
+              newLocation = `/${host}${locUrl.pathname}${locUrl.search}${locUrl.hash}`;
+            }
+          } catch {
+            // Keep original
+          }
+        }
+        responseHeaders.set(key, newLocation);
+      } else if (lowerKey === "set-cookie") {
+        responseHeaders.set(key, value);
+      } else if (lowerKey !== "content-encoding" && lowerKey !== "transfer-encoding") {
+        responseHeaders.set(key, value);
+      }
+    }
+
     responseHeaders.set("Access-Control-Allow-Origin", "*");
     responseHeaders.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
     responseHeaders.set("Access-Control-Allow-Headers", "*");
@@ -61,10 +88,10 @@ async function handleRequest(request: Request): Promise<Response> {
       headers: responseHeaders,
     });
   } catch (error) {
-    return new Response(
-      JSON.stringify({ error: "Proxy Error", message: (error as Error).message }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: "Proxy Error", message: (error as Error).message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 }
 
